@@ -7,8 +7,8 @@ print(lightgbm.__version__)
 from pipelines.image import extract_image_features
 from pipelines.text import extract_text_features
 from utils.inference import predict_adoption_time
-
 def main():
+
     st.title("🐶 Pawnder 🐱")
     st.write("Conoce en cuánto tiempo será adoptada tu mascota")
 
@@ -44,7 +44,7 @@ def main():
 
     Quantity = 1
     VideoAmt = 0
-    PhotoAmt = 1
+    PhotoAmt = st.number_input("Número de fotos", 0, 10, 1)
 
     Fee = st.number_input("Fee", 0, 1000, 0)
 
@@ -54,40 +54,10 @@ def main():
     if st.button("Predecir"):
 
         if uploaded_file is not None and description != "":
-        if uploaded_file is not None and description != "":
 
-            # 1. Se crea el input del usuario
-            user_input = {
-                "Type": Type,
-                "Age": Age,
-                "Gender": Gender,
-                "Breed1": Breed1,
-                "Breed2": Breed2,
-                "Color1": Color1,
-                "Color2": Color2,
-                "Color3": Color3,
-                "MaturitySize": MaturitySize,
-                "FurLength": FurLength,
-                "Vaccinated": Vaccinated,
-                "Dewormed": Dewormed,
-                "Sterilized": Sterilized,
-                "Health": Health,
-                "Quantity": Quantity,
-                "VideoAmt": VideoAmt,
-                "PhotoAmt": PhotoAmt,
-                "Fee": Fee,
-                "Description": description
-            }
-
-            # =================================================
-            # 2. DATAFRAME BASE
-            # =================================================
-            df_user = pd.DataFrame([user_input])
             image = Image.open(uploaded_file)
 
             st.success("Inputs capturados correctamente ✔")
 
         else:
             st.error("Falta imagen o descripción")
-if __name__ == "__main__":
-    main()

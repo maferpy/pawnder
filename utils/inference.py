@@ -4,7 +4,7 @@ import joblib
 model = joblib.load("models/stacking_model.pkl")
 pca = joblib.load("models/pca_200.pkl")
 
-fee_cfg = joblib.load("models/fee_bins.pkl")
+fee_cfg = joblib.load("models/fee_bins_u.pkl")
 fee_bins = fee_cfg["bins"]
 fee_labels = fee_cfg["labels"]
 

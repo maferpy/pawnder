@@ -1,6 +1,8 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
+import lightgbm
+print(lightgbm.__version__)
 
 from pipelines.image import extract_image_features
 from pipelines.text import extract_text_features

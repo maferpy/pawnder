@@ -7,7 +7,7 @@ from tensorflow.keras.preprocessing.image import img_to_array
 from PIL import Image
 
 base_model = EfficientNetB0(
-    weights="imagenet",
+    weights="None",
     include_top=False,
     input_shape=(224, 224, 3)
 )

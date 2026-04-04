@@ -1,7 +1,7 @@
 import numpy as np
 import joblib
 
-model = joblib.load("models/model.pkl")
+model = joblib.load("models/stacking_model.pkl")
 pca = joblib.load("models/pca_200.pkl")
 
 def predict_adoption_time(features):

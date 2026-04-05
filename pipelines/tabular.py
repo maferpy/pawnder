@@ -44,7 +44,8 @@ def df_engineering(df, fee_bins, fee_labels):
             "senior"
         ]
     )
-
+    df["age_bin"] = df["age_bin"].astype("category")
+    
     # fee_pets
 
     df["fee_pets"] = pd.cut(
@@ -53,7 +54,7 @@ def df_engineering(df, fee_bins, fee_labels):
         labels=fee_labels,
         include_lowest=True
     )
-
+    df["fee_pets"] = df["fee_pets"].astype("category")
     # is_pure
     df["is_pure"] = (df["Breed1"] != 307).astype(int)
 

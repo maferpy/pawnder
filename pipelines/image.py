@@ -1,60 +1,67 @@
+# pipelines/image.py
 import numpy as np
-import joblib
-import ssl
-import certifi  
-ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
-from tensorflow.keras.applications import EfficientNetB0
+from PIL import Image
+import streamlit as st
+from tensorflow.keras.applications.efficientnet import EfficientNetB0, preprocess_input
 from tensorflow.keras.layers import GlobalAveragePooling2D
 from tensorflow.keras.models import Model
-from tensorflow.keras.applications.efficientnet import preprocess_input
-from tensorflow.keras.preprocessing.image import img_to_array, load_img
-from PIL import Image
 
-# Modelo CNN EfficientNetB0
-base_model = EfficientNetB0(
-    weights="imagenet",
-    include_top=False,
-    input_shape=(224, 224, 3)
-)
+# -------------------------
+# CARGA DEL MODELO (CACHEADO)
+# -------------------------
+@st.cache_resource
+def load_image_model():
+    base_model = EfficientNetB0(weights="imagenet", include_top=False)
+    x = GlobalAveragePooling2D()(base_model.output)
+    model = Model(inputs=base_model.input, outputs=x)
+    return model
 
-image_model = Model(
-    inputs=base_model.input,
-    outputs=GlobalAveragePooling2D()(base_model.output)
-)
+image_model = load_image_model()
 
-pca_200 = joblib.load("models/pca_200.pkl")
+import joblib
 
-def preprocess_image(image):
+@st.cache_resource
+def load_pca():
+    return joblib.load("models/pca_200.pkl")
 
+pca = load_pca()
+
+# -------------------------
+# EXTRACCIÓN DE FEATURES
+# -------------------------
+def get_image_features(image: Image.Image) -> np.ndarray:
+    """
+    Convierte una imagen PIL en un vector de características usando EfficientNetB0.
+    """
+    # Redimensionar la imagen al tamaño esperado por EfficientNet
     image = image.resize((224, 224))
-    image = img_to_array(image)
-    image = np.expand_dims(image, axis=0)
-
-    image = preprocess_input(image)
-
-    return image
-
-def get_image_embedding(image):
-
-    img = preprocess_image(image)
-
-    features = image_model.predict(img, verbose=0)
-
+    
+    # Convertir a array y expandir dimensiones
+    img_array = np.array(image)
+    if img_array.shape[-1] == 4:  # eliminar canal alpha si existe
+        img_array = img_array[..., :3]
+    img_array = np.expand_dims(img_array, axis=0)
+    
+    # Preprocesar
+    img_array = preprocess_input(img_array)
+    
+    # Extraer features sin mostrar barra de progreso
+    features = image_model.predict(img_array, verbose=0)
+    
     return features
 
-def get_image_features(image):
+# -------------------------
+# PIPELINE COMPLETO
+# -------------------------
+def process_image_pipeline(uploaded_file):
+    # Abrir imagen
+    image = Image.open(uploaded_file).convert("RGB")
+    
+    # Extraer features originales
+    features = get_image_features(image)  # shape (1280,)
+    
+    # Aplicar PCA
+    features_pca = pca.transform(features.reshape(1, -1))  # reshape necesario para 2D
+    
+    return features_pca  # shape (1, 200)
 
-    emb = get_image_embedding(image)
-
-    emb_reduced = pca_200.transform(emb)
-
-    return emb_reduced
-
-def process_image_pipeline(image):
-
-    features = get_image_features(image)
-
-    img_df = pd.DataFrame(features)
-    img_df.columns = [f"img_{i}" for i in range(img_df.shape[1])]
-
-    return img_df

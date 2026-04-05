@@ -1,12 +1,34 @@
 import numpy as np
 import joblib
+import pandas as pd
+import streamlit as st
 
-model = joblib.load("models/stacking_model.pkl")
-pca = joblib.load("models/pca_200.pkl")
+from pipelines.tabular import process_tabular_pipeline
+from pipelines.text import process_text_pipeline
+from pipelines.image import process_image_pipeline
 
-fee_cfg = joblib.load("models/fee_bins_u.pkl")
-fee_bins = fee_cfg["bins"]
-fee_labels = fee_cfg["labels"]
+from sentence_transformers import SentenceTransformer
+
+
+# ------------------------
+# CARGA MODELOS
+# ------------------------
+@st.cache_resource
+def load_all():
+    model = joblib.load("models/stacking_model.pkl")
+    pca = joblib.load("models/pca_200.pkl")
+    fee_cfg = joblib.load("models/fee_bins_u.pkl")
+    return model, pca, fee_cfg
+
+
+@st.cache_resource
+def load_text_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+
+model, pca, fee_cfg = load_all()
+text_model = load_text_model()
+
 
 model_text = model["model_text"]
 model_img = model["model_img"]
@@ -15,17 +37,45 @@ meta_model = model["meta_model"]
 text_tab_cols = model["text_cols"]
 img_cols = model["img_cols"]
 
-def predict_adoption_time(text_features, img_features):
-    
-    # 1. predicciones base
-    pred_text = model_text.predict_proba(text_features)
-    pred_img = model_img.predict_proba(img_features)
 
-    # 2. stacking
+# ------------------------
+# PREDICCIÓN
+# ------------------------
+def predict_adoption_time(user_input: dict, uploaded_file):
+
+    # TABULAR
+    df = pd.DataFrame([user_input])
+    tabular = process_tabular_pipeline(df)
+
+    categorical_cols = ["age_bin", "fee_pets"]
+    for col in categorical_cols:
+        tabular[col] = tabular[col].astype("category").cat.codes
+
+    tabular = tabular.drop(columns=["Description"], errors="ignore")
+    tabular = tabular.drop(columns=["Breed1"], errors="ignore")
+    tabular = tabular.drop(columns=["Age"], errors="ignore")
+    print("tabular listo")
+    print("Columnas tabulares:", tabular.columns.tolist())
+
+    # TEXT
+    df_text = pd.DataFrame([{"Description": user_input["Description"]}])
+    text_df = process_text_pipeline(df_text)  
+    text_array = text_df.to_numpy()
+    print("text listo")
+    print("Columnas tabulares:", text_df.columns.tolist())
+    # IMAGE
+    img_array = process_image_pipeline(uploaded_file)
+    print("img listo")
+
+    # CONCAT FEATURES
+    X_text_tab = np.hstack([tabular.to_numpy(), text_array])
+
+    # BASE MODELS
+    pred_text = model_text.predict_proba(X_text_tab)
+    pred_img = model_img.predict_proba(img_array)
+
+    # STACKING
     X_meta = np.hstack([pred_text, pred_img])
-
-    # 3. predicción final
     pred = meta_model.predict(X_meta)
 
-    return pred[0]
-    
+    return int(pred[0])

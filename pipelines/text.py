@@ -1,15 +1,14 @@
 import numpy as np
 import pandas as pd
 import re
+import streamlit as st
 from sentence_transformers import SentenceTransformer
 
+MEAN_EMB = np.load("models/mean_embedding.npy")
 
-
-# Modelo de embeddings
-MODEL_NAME = "intfloat/multilingual-e5-base"
-model = SentenceTransformer(MODEL_NAME)
-
-# Limpieza de texto
+# -------------------------
+# LIMPIEZA
+# -------------------------
 def clean_text(text):
     text = str(text)
     text = text.lower()
@@ -18,7 +17,9 @@ def clean_text(text):
     return text.strip()
 
 
-# Features basicas
+# -------------------------
+# FEATURES BÁSICAS
+# -------------------------
 def basic_features(df):
     df["desc_words"] = df["Description"].apply(lambda x: len(x.split()))
     df["desc_chars"] = df["Description"].apply(len)
@@ -39,7 +40,9 @@ def basic_features(df):
     return df
 
 
-# Keywords
+# -------------------------
+# KEYWORDS
+# -------------------------
 def keyword_features(df):
 
     df["is_friendly"] = df["Description"].str.contains(
@@ -75,58 +78,38 @@ def keyword_features(df):
     return df
 
 
-# Embeddings
-
-def get_embeddings(df):
-    texts = df["Description"].tolist()
-
-    # IMPORTANTE: inference mode (sin training)
-    embeddings = model.encode(
-        texts,
-        show_progress_bar=False,
-        convert_to_numpy=True
-    )
-
-    return embeddings
-
-
-# PIPELINE COMPLETO
+# -------------------------
+# PIPELINE FINAL (SIN EMBEDDINGS)
+# -------------------------
 
 def process_text_pipeline(df):
 
     df = df.copy()
-    for col in ["age_bin", "fee_pets"]:
-        df[col] = df[col].astype("category")
 
-    # 1. asegurar columna
- 
-    df["Description"] = df["Description"].fillna("")
+    # -------------------
+    # LIMPIEZA
+    # -------------------
+    df["Description"] = df["Description"].fillna("").apply(clean_text)
 
-
-    # 2. limpieza
-
-    df["Description"] = df["Description"].apply(clean_text)
-
-
-    # 3. features manuales
-
+    # -------------------
+    # FEATURES BUENAS (rápidas)
+    # -------------------
     df = basic_features(df)
     df = keyword_features(df)
 
+    # -------------------
+    # 🔥 EMBEDDINGS (NO reales)
+    # -------------------
+    embeddings = np.tile(MEAN_EMB, (len(df), 1))
 
-    # 4. embeddings
-
-    embeddings = get_embeddings(df)
-
-    emb_df = pd.DataFrame(embeddings)
-    emb_df.columns = [f"emb_{i}" for i in range(emb_df.shape[1])]
-
-
-    # 5. merge final
- 
-    df_final = pd.concat(
-        [df.reset_index(drop=True), emb_df],
-        axis=1
+    emb_df = pd.DataFrame(
+        embeddings,
+        columns=[f"emb_{i}" for i in range(768)]
     )
 
-    return df_final
+    # -------------------
+    # CONCAT
+    # -------------------
+    df = pd.concat([df.reset_index(drop=True), emb_df], axis=1)
+
+    return df.drop(columns=["Description"])

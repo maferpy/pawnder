@@ -7,34 +7,54 @@ from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.layers import GlobalAveragePooling2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications.efficientnet import preprocess_input
-from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
 from PIL import Image
 
-
-# Modelo CNN 
+# Modelo CNN EfficientNetB0
 base_model = EfficientNetB0(
     weights="imagenet",
     include_top=False,
     input_shape=(224, 224, 3)
 )
 
-x = GlobalAveragePooling2D()(base_model.output)
-image_model = Model(inputs=base_model.input, outputs=x)
+image_model = Model(
+    inputs=base_model.input,
+    outputs=GlobalAveragePooling2D()(base_model.output)
+)
 
-# PCA entrenado
-pca = joblib.load("models/pca_200.pkl")
+pca_200 = joblib.load("models/pca_200.pkl")
 
+def preprocess_image(image):
 
-def extract_image_features(image: Image.Image):
+    image = image.resize((224, 224))
+    image = img_to_array(image)
+    image = np.expand_dims(image, axis=0)
 
-    img = image.resize((224, 224))
-    img = img_to_array(img)
-    img = np.expand_dims(img, axis=0)
-    img = preprocess_input(img)
+    image = preprocess_input(image)
+
+    return image
+
+def get_image_embedding(image):
+
+    img = preprocess_image(image)
 
     features = image_model.predict(img, verbose=0)
 
-   
-    features = pca.transform(features)
+    return features
 
-    return features.flatten()
+def get_image_features(image):
+
+    emb = get_image_embedding(image)
+
+    emb_reduced = pca_200.transform(emb)
+
+    return emb_reduced
+
+def process_image_pipeline(image):
+
+    features = get_image_features(image)
+
+    img_df = pd.DataFrame(features)
+    img_df.columns = [f"img_{i}" for i in range(img_df.shape[1])]
+
+    return img_df

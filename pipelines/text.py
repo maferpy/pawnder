@@ -43,7 +43,7 @@ def basic_features(df):
 def keyword_features(df):
 
     df["is_friendly"] = df["Description"].str.contains(
-        r"friendly|amigable|cariñ|playful|juguet",
+        r"friendly|amigable|cariñoso|playful|juguet",
         regex=True,
         na=False
     ).astype(int)
@@ -95,34 +95,35 @@ def get_embeddings(df):
 def process_text_pipeline(df):
 
     df = df.copy()
+    for col in ["age_bin", "fee_pets"]:
+        df[col] = df[col].astype("category")
 
-    # -------------------------
     # 1. asegurar columna
-    # -------------------------
+ 
     df["Description"] = df["Description"].fillna("")
 
-    # -------------------------
+
     # 2. limpieza
-    # -------------------------
+
     df["Description"] = df["Description"].apply(clean_text)
 
-    # -------------------------
+
     # 3. features manuales
-    # -------------------------
+
     df = basic_features(df)
     df = keyword_features(df)
 
-    # -------------------------
+
     # 4. embeddings
-    # -------------------------
+
     embeddings = get_embeddings(df)
 
     emb_df = pd.DataFrame(embeddings)
     emb_df.columns = [f"emb_{i}" for i in range(emb_df.shape[1])]
 
-    # -------------------------
+
     # 5. merge final
-    # -------------------------
+ 
     df_final = pd.concat(
         [df.reset_index(drop=True), emb_df],
         axis=1

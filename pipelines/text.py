@@ -1,11 +1,15 @@
 import numpy as np
+import pandas as pd
 import re
 from sentence_transformers import SentenceTransformer
 
-# mismo modelo que Colab
-model = SentenceTransformer("intfloat/multilingual-e5-base")
 
-# Clean text
+
+# Modelo de embeddings
+MODEL_NAME = "intfloat/multilingual-e5-base"
+model = SentenceTransformer(MODEL_NAME)
+
+# Limpieza de texto
 def clean_text(text):
     text = str(text)
     text = text.lower()
@@ -14,64 +18,114 @@ def clean_text(text):
     return text.strip()
 
 
-# Features básicas
-def basic_features(text):
+# Features basicas
+def basic_features(df):
+    df["desc_words"] = df["Description"].apply(lambda x: len(x.split()))
+    df["desc_chars"] = df["Description"].apply(len)
 
-    words = text.split()
+    df["is_short"] = (df["desc_words"] < 30).astype(int)
+    df["is_long"] = (df["desc_words"] > 80).astype(int)
 
-    desc_words = len(words)
-    desc_chars = len(text)
+    df["num_exclamation"] = df["Description"].apply(lambda x: x.count("!"))
+    df["has_numbers"] = df["Description"].str.contains(r"\d", na=False).astype(int)
+    df["has_uppercase"] = df["Description"].str.contains(r"[A-Z]", na=False).astype(int)
 
-    is_short = int(desc_words < 30)
-    is_long = int(desc_words > 80)
+    df["num_sentences"] = df["Description"].str.count(r"[.!?]")
 
-    num_exclamation = text.count("!")
-    has_numbers = int(bool(re.search(r"\d", text)))
-    has_uppercase = int(any(c.isupper() for c in text))
-    num_sentences = text.count(".") + text.count("!") + text.count("?")
-
-    avg_word_length = (
-        np.mean([len(w) for w in words]) if words else 0
+    df["avg_word_length"] = df["Description"].apply(
+        lambda x: np.mean([len(w) for w in x.split()]) if len(x.split()) > 0 else 0
     )
 
-    return np.array([
-        desc_words,
-        desc_chars,
-        is_short,
-        is_long,
-        num_exclamation,
-        has_numbers,
-        has_uppercase,
-        num_sentences,
-        avg_word_length
-    ])
+    return df
 
 
 # Keywords
-def keyword_features(text):
+def keyword_features(df):
 
-    return np.array([
-        int(bool(re.search(r"friendly|amigable|cariños|playful|juguet", text))),
-        int(bool(re.search(r"kids?|children|niñ", text))),
-        int(bool(re.search(r"dogs?|cats?|perros?|gatos?", text))),
-        int(bool(re.search(r"urgent|asap|rescue|urgente", text))),
-        int(bool(re.search(r"sick|injured|disease|enfermo|herido", text))),
-    ])
+    df["is_friendly"] = df["Description"].str.contains(
+        r"friendly|amigable|cariñ|playful|juguet",
+        regex=True,
+        na=False
+    ).astype(int)
+
+    df["good_with_kids"] = df["Description"].str.contains(
+        r"kids?|children|niñ",
+        regex=True,
+        na=False
+    ).astype(int)
+
+    df["good_with_pets"] = df["Description"].str.contains(
+        r"dogs?|cats?|perros?|gatos?",
+        regex=True,
+        na=False
+    ).astype(int)
+
+    df["urgent"] = df["Description"].str.contains(
+        r"urgent|asap|rescue|urgente",
+        regex=True,
+        na=False
+    ).astype(int)
+
+    df["has_health_issue"] = df["Description"].str.contains(
+        r"sick|injured|disease|enfermo|herido",
+        regex=True,
+        na=False
+    ).astype(int)
+
+    return df
 
 
 # Embeddings
-def text_embedding(text):
-    text = clean_text(text)
-    return model.encode([text])[0]
+
+def get_embeddings(df):
+    texts = df["Description"].tolist()
+
+    # IMPORTANTE: inference mode (sin training)
+    embeddings = model.encode(
+        texts,
+        show_progress_bar=False,
+        convert_to_numpy=True
+    )
+
+    return embeddings
 
 
-# Pipeline de texto
-def extract_text_features(text):
+# PIPELINE COMPLETO
 
-    text = clean_text(text)
+def process_text_pipeline(df):
 
-    basic = basic_features(text)
-    keywords = keyword_features(text)
-    emb = text_embedding(text)
+    df = df.copy()
 
-    return np.concatenate([basic, keywords, emb])
+    # -------------------------
+    # 1. asegurar columna
+    # -------------------------
+    df["Description"] = df["Description"].fillna("")
+
+    # -------------------------
+    # 2. limpieza
+    # -------------------------
+    df["Description"] = df["Description"].apply(clean_text)
+
+    # -------------------------
+    # 3. features manuales
+    # -------------------------
+    df = basic_features(df)
+    df = keyword_features(df)
+
+    # -------------------------
+    # 4. embeddings
+    # -------------------------
+    embeddings = get_embeddings(df)
+
+    emb_df = pd.DataFrame(embeddings)
+    emb_df.columns = [f"emb_{i}" for i in range(emb_df.shape[1])]
+
+    # -------------------------
+    # 5. merge final
+    # -------------------------
+    df_final = pd.concat(
+        [df.reset_index(drop=True), emb_df],
+        axis=1
+    )
+
+    return df_final

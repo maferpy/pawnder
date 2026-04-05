@@ -2,35 +2,36 @@ import pandas as pd
 import numpy as np
 import joblib
 
-# cargar diccionario de breeds
-breed_dict = pd.read_csv("data/breeds.csv")
+# cargar bins y labels de fee   
+fee_cfg = joblib.load("models/fee_bins_u.pkl")
+fee_bins = fee_cfg["bins"]
+fee_labels = fee_cfg["labels"]
 
+# cargar diccionario de breeds
+breed_dict = pd.read_csv("breeds/BreedLabels.csv")
 breed_map = dict(zip(breed_dict["BreedName"], breed_dict["BreedID"]))
 
 
-# --------------------------
-# 1. MAPEO BREED
-# --------------------------
+# Mapeo de breeds
 def map_breed(df):
 
     df["Breed1"] = df["Breed1"].str.lower().fillna("unknown")
 
     df["Breed1"] = df["Breed1"].apply(
-        lambda x: breed_map.get(x, 0)  # 0 = unknown
+        lambda x: breed_map.get(x, 307)  # 307 = unknown
     )
 
     return df
 
 
-# --------------------------
-# 2. FEATURE ENGINEERING
-# --------------------------
-def df_engineering(df):
+# Feature engineering
+def df_engineering(df, fee_bins, fee_labels):
 
-    # colores activos
+    # colors
     df["num_colors"] = (df[["Color1", "Color2", "Color3"]] > 0).sum(axis=1)
 
     # age bin
+
     df["age_bin"] = pd.cut(
         df["Age"],
         bins=[-1, 2, 6, 12, 36, 84, 1000],
@@ -44,24 +45,20 @@ def df_engineering(df):
         ]
     )
 
-    # fee bins (dinámico ya precomputado en training idealmente)
-    mask = df["Fee"] > 0
+    # fee_pets
 
-    if mask.sum() > 0:
-        q50 = df.loc[mask, "Fee"].quantile(0.5)
-        q85 = df.loc[mask, "Fee"].quantile(0.85)
-    else:
-        q50, q85 = 1, 10
-
-    bins = [-1, 0, q50, q85, df["Fee"].max()]
-    labels = ["gratis", "bajo", "medio", "alto"]
-
-    df["fee_pets"] = pd.cut(df["Fee"], bins=bins, labels=labels)
+    df["fee_pets"] = pd.cut(
+        df["Fee"],
+        bins=fee_bins,
+        labels=fee_labels,
+        include_lowest=True
+    )
 
     # is_pure
-    df["is_pure"] = ((df["Breed2"] == 0) & (df["Breed1"] != 307)).astype(int)
+    df["is_pure"] = (df["Breed1"] != 307).astype(int)
 
-    # health score
+
+    # health
     df["health_score"] = (
         df["Vaccinated"] +
         df["Dewormed"] +
@@ -75,12 +72,14 @@ def df_engineering(df):
         (df["Age"] > 84).astype(int)
     )
 
+
+    # log transform
+    df["log_age"] = np.log1p(df["Age"])
+
     return df
 
 
-# --------------------------
-# 3. PIPELINE COMPLETO
-# --------------------------
+# Pipeline tabular
 def process_tabular_pipeline(df):
 
     df = df.copy()
@@ -92,6 +91,6 @@ def process_tabular_pipeline(df):
     df = map_breed(df)
 
     # feature engineering
-    df = df_engineering(df)
+    df = df_engineering(df, fee_bins, fee_labels)
 
     return df

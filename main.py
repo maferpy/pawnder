@@ -3,9 +3,9 @@ import numpy as np
 from PIL import Image
 import lightgbm
 print(lightgbm.__version__)
-
-from pipelines.image import extract_image_features
-from pipelines.text import extract_text_features
+from pipelines.text import process_text_pipeline
+from pipelines.image import process_image_pipeline
+from pipelines.tabular import process_tabular_pipeline
 from utils.inference import predict_adoption_time
 
 def main():
@@ -78,16 +78,16 @@ def main():
                 "Description": description
             }
 
-            # 2. Crea el dataframe base
-            df_user = pd.DataFrame([user_input])
-            image = Image.open(uploaded_file)
+        image = Image.open(uploaded_file)
 
-            st.success("Inputs capturados correctamente ✔")
+        prediction = predict_adoption_time(
+            user_input,
+            image
+        )
+        st.success(f"Predicción: {prediction}")
 
         else:
             st.error("Falta imagen o descripción")
 
-        df_tabular = process_tabular_pipeline(df_user)
-        df_text = process_text_pipeline(df_tabular)
 if __name__ == "__main__":
     main()

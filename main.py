@@ -85,6 +85,14 @@ def main():
             image
         )
         st.success(f"Predicción: {prediction}")
+         labels = {
+        0: "⏳ Adopción rápida, ese mismo día ",
+        1: "⏳ Adopción de 1–7 días",
+        2: "⏳ Adopción de 8-30 días"
+        3: "⏳ Adopción de 30-90 días"
+        4: "⏳ Adopción de (90+)"
+        }
+        st.success(labels[prediction])
 
         else:
             st.error("Falta imagen o descripción")

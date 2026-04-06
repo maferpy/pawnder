@@ -8,11 +8,17 @@ from pipelines.text import process_text_pipeline
 from pipelines.image import process_image_pipeline
 
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+from openai import OpenAI
+import os
 
+# Agregar openai
 
-# ------------------------
-# CARGA MODELOS
-# ------------------------
+load_dotenv()  # 👈 esto carga el .env
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Carga Modelos
 @st.cache_resource
 def load_all():
     model = joblib.load("models/stacking_model.pkl")
@@ -79,3 +85,60 @@ def predict_adoption_time(user_input: dict, uploaded_file):
     pred = meta_model.predict(X_meta)
 
     return int(pred[0])
+
+# OpenAI
+def generate_adoption_tips(description, animal_type, age, size, fee, prediction):
+
+
+
+    # Mapear predicción
+
+    speed_map = {
+        0: "rápida",
+        1: "media",
+        2: "lenta",
+        3: "muy lenta",
+        4: "sin adopción"
+    }
+
+    adoption_speed = speed_map.get(int(prediction), "desconocida")
+
+    # Prompt 
+    prompt = f"""
+    Soy un experto en adopción de mascotas.
+
+    Información de la mascota:
+    - Descripción: {description}
+    - Tipo: {"Perro" if animal_type == 1 else "Gato"}
+    - Edad: {age} meses
+    - Tamaño: {size}
+    - Precio: {fee}
+
+    El modelo predice que la adopción será: {adoption_speed}.
+
+    Instrucciones:
+    - Si la adopción es rápida o media: refuerza lo positivo.
+    - Si la adopción es lenta o muy lenta: da consejos para mejorar visibilidad, fotos, descripción o precio.
+    - Si no se adoptaría: da recomendaciones más agresivas y concretas.
+
+    Dame 3 consejos cortos, claros y accionables.
+    Considera la descripción de la mascota.
+    """
+
+    # ------------------------
+    # Llamada a OpenAI (multimodal)
+    # ------------------------
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                ]
+            }
+        ],
+        max_tokens=150
+    )
+
+    return response.choices[0].message.content

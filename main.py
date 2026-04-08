@@ -129,7 +129,8 @@ def page_predictions():
                 Age,
                 maturity_map[MaturitySize],
                 Fee,
-                prediction
+                prediction,
+                client
             )
             with st.expander("💡 Consejos para acelerar la adopción"):
                 st.write(tips)

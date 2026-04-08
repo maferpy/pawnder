@@ -52,7 +52,7 @@ def main():
     VideoAmt = 0
     PhotoAmt = 1
 
-    if st.button("🔮 Predecir adopción"):
+    if st.button("🔮 Descubre su tiempo de adopción!"):
         if not uploaded_file or description.strip() == "":
             st.error("Por favor sube una imagen y escribe una descripción")
             return

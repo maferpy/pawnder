@@ -22,25 +22,10 @@ def load_data():
     embeddings = np.load("embeddings/embeddings_text_t.npy")
     return df, embeddings
 
-@st.cache_resource
-def load_model():
-    return SentenceTransformer("intfloat/multilingual-e5-base")
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer("intfloat/multilingual-e5-base")
 
 @st.cache_data
-def translate_text(text):
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "Traduce al español de forma natural."},
-                {"role": "user", "content": str(text)}
-            ],
-            temperature=0.3
-        )
-        return response.choices[0].message.content
-    except:
-        return text
-
 def map_images(folder, df):
     df = df.copy()
     files = os.listdir(folder)
@@ -63,130 +48,214 @@ def infer_activity(desc):
         return "Bajo"
     return "Medio"
 
+@st.cache_data
+def translate_text(text, client=client):
+    """
+    Traduce el texto al español usando OpenAI.
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "Traduce al español de forma natural."},
+                {"role": "user", "content": str(text)}
+            ],
+            temperature=0.3
+        )
+        return response.choices[0].message.content
+    except:
+        return text
+
 # ------------------------
-# CARGAR DATOS Y MODELOS
+# INICIALIZACIÓN
 # ------------------------
 @st.cache_resource
 def init_app():
     df, embeddings = load_data()
-    model = load_model()
     df = map_images("datasets/train_images", df)
     df["activity_level"] = df["Description"].apply(infer_activity)
-    return df, embeddings, model
+    return df, embeddings
 
-df, embeddings, model = init_app()
-
-# ------------------------
-# MENÚ DE PÁGINAS
-# ------------------------
-if "page" not in st.session_state:
-    st.session_state.page = "recomendaciones"
-if "pos" not in st.session_state:
-    st.session_state.pos = 0
+# Session state
+if "pos" not in st.session_state: st.session_state.pos = 0
+if "ranked" not in st.session_state: st.session_state.ranked = None
+if "df_f" not in st.session_state: st.session_state.df_f = None
+if "selected_pet" not in st.session_state: st.session_state.selected_pet = None
 
 # ------------------------
 # PÁGINA RECOMENDACIONES
 # ------------------------
-def  page_recommendations():
-    if st.session_state.page == "recomendaciones":
-        st.title("🐶 Pawnder - Encuentra tu mascota ideal")
+def page_recommendations(df, client):
+    if st.session_state.page != "recomendaciones":
+        return
 
-        # Preferencias usuario
-        col1, col2 = st.columns(2)
-        with col1:
-            pref_type = st.radio("Tipo", ["Perro", "Gato"])
-            pref_age = st.slider("Edad (meses)", 0, 200, (0, 24))
-            activity = st.selectbox("Actividad deseada", ["Bajo", "Medio", "Alto"])
-        with col2:
-            has_kids = st.selectbox("👦🏻 ¿Tienes niños? 👧🏻", ["Sí", "No"])
-            has_pets = st.selectbox("🦮 ¿Tienes mascotas?", ["Sí", "No"])
-            time_available = st.selectbox("⏰ Tiempo disponible", ["Poco", "Medio", "Mucho"])
+    st.title("🐾 Pawnder - Encuentra tu mascota ideal")
 
-        home_type = st.selectbox("🏠 Tipo de hogar 🏡", ["Departamento", "Casa con patio"])
-        other_pref = st.text_area("🔎 ¿Algo más que buscas?")
+    # ------------------------
+    # FILTROS
+    # ------------------------
+    col1, col2 = st.columns(2)
 
-        # Botón para recomendar
-        if st.button("🐾 Recomiéndame!"):
-            user_text = f"Tipo: {pref_type}, Edad: {pref_age}, Actividad: {activity}, Tiene niños: {has_kids}, Tiene mascotas: {has_pets}, Tiempo: {time_available}, Hogar: {home_type}, Preferencias: {other_pref}"
-            user_emb = model.encode([user_text])
+    with col1:
+        pref_type = st.radio("Tipo", ["Perro", "Gato"])
+        pref_age = st.slider("Edad (meses)", 0, 200, (0, 24))
+        activity = st.selectbox("Actividad", ["Bajo", "Medio", "Alto"])
+        home_type = st.selectbox("🏠 Hogar", ["Departamento", "Casa con patio"])
+
+    with col2:
+        has_kids = st.selectbox("👦🏻 Niños", ["Sí", "No"])
+        has_pets = st.selectbox("🐶 Mascotas", ["Sí", "No"])
+        time_available = st.selectbox("⏰ Tiempo", ["Poco", "Medio", "Mucho"])
+        health_pref = st.selectbox("🩺 Salud", ["Cualquiera", "Saludable", "Especial"])
+
+    max_fee = st.slider("💸 Costo máximo", 0, 1000, 200)
+    priority = st.selectbox("🚨 ¿Casos urgentes?", ["No importa", "Sí"])
+
+    # ------------------------
+    # BOTÓN
+    # ------------------------
+    if st.button("🐾 Recomiéndame!", key="recomienda"):
+
+        df_f = df.copy()
+
+        # Tipo
+        df_f = df_f[df_f["Type"] == (1 if pref_type=="Perro" else 2)]
+
+        # Edad
+        df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
+
+        # Actividad (flexible según tiempo)
+        if time_available == "Poco":
+            df_f = df_f[df_f["activity_level"] == "Bajo"]
+        elif time_available == "Medio":
+            df_f = df_f[df_f["activity_level"].isin(["Bajo","Medio"])]
+        else:
+            pass  # Mucho → cualquiera
+
+        # Niños
+        if has_kids == "Sí":
+            df_f = df_f[df_f["good_with_kids"] == 1]
+
+        # Mascotas
+        if has_pets == "Sí":
+            df_f = df_f[df_f["good_with_pets"] == 1]
+
+        # Hogar
+        if home_type == "Departamento":
+            df_f = df_f[df_f["MaturitySize"].isin([1,2])]
+
+        # Salud
+        if health_pref == "Saludable":
+            df_f = df_f[df_f["has_health_issue"] == 0]
+        elif health_pref == "Especial":
+            df_f = df_f[df_f["has_health_issue"] == 1]
+
+        # Costo
+        df_f = df_f[df_f["Fee"] <= max_fee]
+
+        # Fallback si hay pocos resultados
+        if len(df_f) < 5:
             df_f = df.copy()
-            df_f = df_f[df_f["Type"] == (1 if pref_type=="Perro" else 2)]
-            df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
-            if len(df_f) < 5: df_f = df.copy()
-            idx_original = df_f.index.tolist()
-            emb_f = embeddings[idx_original]
-            df_f = df_f.reset_index(drop=True)
 
-            # Similitud + penalizaciones
-            sims = cosine_similarity(user_emb, emb_f)[0]
-            penalty = []
-            for _, row in df_f.iterrows():
-                p = 0
-                if activity == "Bajo" and row.get("activity_level","")!="Bajo": p-=1
-                if has_kids=="Sí" and row.get("good_with_kids",1)==0: p-=2
-                if has_pets=="Sí" and row.get("good_with_pets",1)==0: p-=2
-                penalty.append(p)
-            final_score = sims + np.array(penalty)
-            ranked = np.argsort(final_score)[::-1]
+        # ------------------------
+        # SCORING INTELIGENTE
+        # ------------------------
+        score = np.zeros(len(df_f))
 
-            st.session_state.ranked = ranked
-            st.session_state.df_f = df_f
-            st.session_state.pos = 0
+        score += (df_f["activity_level"] == activity) * 2
 
-        # Mostrar resultados
-        if "ranked" in st.session_state:
-            df_f = st.session_state.df_f
-            start = st.session_state.pos
-            end = start + 3
-            idxs = st.session_state.ranked[start:end]
-            pets = df_f.iloc[idxs]
+        if has_kids == "Sí":
+            score += df_f["good_with_kids"] * 2
 
-            for _, row in pets.iterrows():
-                tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
-                st.markdown(f"### {row['Name']} - {tipo}")
-                if has_kids=="Sí" and row.get("good_with_kids",1)==0: st.warning("⚠️ Puede no ser ideal para niños")
-                if has_pets=="Sí" and row.get("good_with_pets",1)==0: st.warning("⚠️ Puede no convivir bien con otras mascotas")
-                razones=[]
-                if row["activity_level"]==activity: razones.append("tu nivel de actividad")
-                if pref_age[0]<=row["Age"]<=pref_age[1]: razones.append("la edad que buscas")
-                st.success(f"💡 Te recomendamos este perro porque coincide con {', '.join(razones)}")
-                desc_es = translate_text(row["Description"])
-                st.write(desc_es)
-                if row["image_paths"]:
-                    cols = st.columns(min(3,len(row["image_paths"])))
-                    for i,img in enumerate(row["image_paths"][:3]): cols[i].image(img,width=200)
-                if st.button(f"✨ ¿Cómo sería tu vida con {row['Name']}?", key=row["PetID"]):
-                    st.session_state.selected_pet = row["PetID"]
-                st.write("---")
+        if has_pets == "Sí":
+            score += df_f["good_with_pets"] * 2
 
-            # Ver más
-            if st.session_state.pos+3 < len(st.session_state.ranked):
-                if st.button("Ver más 🐾"):
-                    st.session_state.pos += 3  # Incrementa la posición
+        score += df_f["is_friendly"] * 1
+        score += df_f["urgent"] * 2
 
-        # Historia de la mascota
-        if "selected_pet" in st.session_state:
-            row = st.session_state.df_f[st.session_state.df_f["PetID"]==st.session_state.selected_pet].iloc[0]
-            desc_es = translate_text(row["Description"])
-            user_ctx = f"Usuario con {has_kids} niños, {has_pets} mascotas, vive en {home_type}, tiene {time_available} tiempo."
-            pet_ctx = f"Mascota: {desc_es}, Actividad: {row['activity_level']}"
-            prompt = f"""{user_ctx}\n{pet_ctx}\nDescribe cómo sería su vida juntos.
-            INSTRUCCIONES IMPORTANTES:
-            - NO uses frases como 'Claro', 'Aquí tienes', 'A continuación'
-            - NO expliques lo que harás
-            - Empieza directamente con la historia
-            - Escribe como una narrativa natural
-            - Usa un tono cálido y emocional
-            - Máximo 120 palabras
-            Responde SOLO con la historia."""
-            with st.spinner("Generando historia..."):
-                resp = client.chat.completions.create(
-                    model="gpt-4.1-mini",
-                    messages=[
-                        {"role": "system", "content": "Eres un narrador. Responde solo con la historia, sin introducciones."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7
-                )
-            st.info(resp.choices[0].message.content)
-page_recommendations()
+        df_f["score"] = score
+        df_f = df_f.sort_values("score", ascending=False)
+
+        st.session_state.df_f = df_f.reset_index(drop=True)
+        st.session_state.pos = 0
+
+    # ------------------------
+    # MOSTRAR RESULTADOS
+    # ------------------------
+    if "df_f" in st.session_state and not st.session_state.df_f.empty:
+
+        df_f = st.session_state.df_f
+        start = st.session_state.pos
+        end = start + 3
+
+        for _, row in df_f.iloc[start:end].iterrows():
+
+            tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
+            st.markdown(f"### {row['Name']} - {tipo}")
+
+            # 💡 EXPLICACIÓN
+            razones = []
+            if row["activity_level"] == activity:
+                razones.append("tu nivel de actividad")
+            if has_kids=="Sí" and row["good_with_kids"]==1:
+                razones.append("es bueno con niños")
+            if has_pets=="Sí" and row["good_with_pets"]==1:
+                razones.append("convive con otras mascotas")
+            if row["urgent"]==1:
+                razones.append("necesita adopción urgente")
+
+            if razones:
+                st.success(f"💡 Recomendado porque coincide con {', '.join(razones)}")
+
+            # Imagen
+            if row["image_paths"]:
+                st.image(row["image_paths"][0], width=200)
+
+            st.markdown(f"""
+            - Edad: {row['Age']} meses  
+            - Actividad: {row['activity_level']}  
+            - Costo: ${row['Fee']}  
+            """)
+
+            # Botón historia
+            if st.button(f"✨ Historia con {row['Name']}", key=f"hist_{row['PetID']}"):
+                st.session_state.selected_pet = row["PetID"]
+
+        # Ver más
+        if end < len(df_f):
+            if st.button("Ver más 🐾"):
+                st.session_state.pos += 3
+
+    # ------------------------
+    # HISTORIA
+    # ------------------------
+    if "selected_pet" in st.session_state and st.session_state.selected_pet is not None:
+
+        row = st.session_state.df_f[
+            st.session_state.df_f["PetID"] == st.session_state.selected_pet
+        ].iloc[0]
+
+        prompt = f"""
+        Usuario con {has_kids} niños, {has_pets} mascotas,
+        vive en {home_type} y tiene tiempo {time_available}.
+        Mascota: {row['Description']}.
+        Cuenta una historia corta y emotiva.
+        """
+
+        with st.spinner("Generando historia..."):
+            resp = client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=[
+                    {"role":"system","content":"Eres un narrador cálido."},
+                    {"role":"user","content":prompt}
+                ],
+                temperature=0.7
+            )
+
+        st.info(resp.choices[0].message.content)
+
+    # ------------------------
+    # VOLVER
+    # ------------------------
+    if st.button("⬅️ Volver al menú", key="volver_menu"):
+        st.session_state.page = "home"

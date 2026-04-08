@@ -5,8 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "lightgbm>=4.6.0",
     "openai>=2.30.0",
     "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.3.0",
     "streamlit>=1.56.0",
+    "tensorflow>=2.21.0",
     "watchdog>=6.0.0",
 ]

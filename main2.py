@@ -244,7 +244,7 @@ def page_recommendations(df, client):
                     model="gpt-4.1-mini",
                     messages=[
                         {"role":"system","content":"Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. 
-                            Siempre escribes en segunda persona hablándole directamente al usuario (usando “tu vida…”, “tú…”). 
+                            Siempre escribes hablándome de tú (usando “tu vida…”, “tú…”). 
                             Tu estilo es descriptivo y envolvente, mostrando situaciones cotidianas con detalles sensoriales y emocionales. 
                             Evitas un tono técnico o frío, y en su lugar transmites calma, amor y conexión. 
                             Tus respuestas deben sentirse como una pequeña historia o visualización del futuro del usuario."},

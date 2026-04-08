@@ -1,6 +1,6 @@
 # 🚨 redeploy force
 import streamlit as st
-st.write("PRODUCCIÓN: main.py cargado correctamente_sindf")
+st.write("PRODUCCIÓN: main.py cargado correctamente_prueba")
 
 if "page" not in st.session_state:
     st.session_state.page = "home"

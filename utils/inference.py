@@ -15,9 +15,13 @@ import os
 # Agregar openai
 
 load_dotenv()  # 👈 esto carga el .env
+api_key = st.secrets.get("OPENAI_API_KEY", None)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+if api_key:
+    client = OpenAI(api_key=api_key)
+else:
+    client = None
+    st.warning("⚠️ OpenAI API key no encontrada. Las historias no se generarán.")
 # Carga Modelos
 @st.cache_resource
 def load_all():
@@ -128,17 +132,19 @@ def generate_adoption_tips(description, animal_type, age, size, fee, prediction)
     # ------------------------
     # Llamada a OpenAI (multimodal)
     # ------------------------
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                ]
-            }
-        ],
-        max_tokens=150
-    )
-
-    return response.choices[0].message.content
+    if client is not None:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                    ]
+                }
+            ],
+            max_tokens=150
+        )
+        response.choices[0].message.content
+    else:
+        st.info("Los consejos no pueden generarse sin API key.")

@@ -12,7 +12,13 @@ if "df_f" not in st.session_state or st.session_state.df_f is None:
     st.session_state.df_f = pd.DataFrame()
 
 df = load_data()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = st.secrets.get("OPENAI_API_KEY", None)
+
+if api_key:
+    client = OpenAI(api_key=api_key)
+else:
+    client = None
+    st.warning("⚠️ OpenAI API key no encontrada. Las historias no se generarán.")
 # ------------------------
 # Inicializar sesión
 # ------------------------

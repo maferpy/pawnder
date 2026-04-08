@@ -13,6 +13,7 @@ if "df_f" not in st.session_state or st.session_state.df_f is None:
 
 df = load_data()
 api_key = st.secrets.get("OPENAI_API_KEY", None)
+st.write("API KEY:", api_key[:5] if api_key else "NO KEY")
 
 if api_key:
     client = OpenAI(api_key=api_key)

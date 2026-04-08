@@ -13,7 +13,7 @@ import os
 
 
 
-def page_predictions():
+def page_predictions(client):
     if st.session_state.page == "predictions":
         if st.button("⬅️ Volver al menú", key="back_menu_predictions"):
             st.session_state.page = "home"

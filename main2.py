@@ -11,18 +11,7 @@ if "pos" not in st.session_state: st.session_state.pos = 0
 if "ranked" not in st.session_state: st.session_state.ranked = None
 if "df_f" not in st.session_state: st.session_state.df_f = None
 if "selected_pet" not in st.session_state: st.session_state.selected_pet = None
-
-# ------------------------
-# Cliente OpenAI
-# ------------------------
-api_key = st.secrets.get("OPENAI_API_KEY", None)
-
-if api_key:
-    client = OpenAI(api_key=api_key)
-else:
-    client = None
-    st.warning("⚠️ OpenAI API key no encontrada. Las historias no se generarán.")
-
+    
 # ------------------------
 # Inferir nivel de actividad desde la descripción
 # ------------------------

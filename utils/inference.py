@@ -145,6 +145,6 @@ def generate_adoption_tips(description, animal_type, age, size, fee, prediction)
             ],
             max_tokens=150
         )
-        response.choices[0].message.content
+        return response.choices[0].message.content
     else:
         st.info("Los consejos no pueden generarse sin API key.")

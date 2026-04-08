@@ -1,4 +1,5 @@
 import streamlit as st
+st.write("PRODUCCIÓN: main.py cargado correctamente")
 
 if "page" not in st.session_state:
     st.session_state.page = "home"
@@ -7,9 +8,6 @@ from main2 import load_data, page_recommendations,df
 from openai import OpenAI
 import os
 import pandas as pd
-
-import streamlit as st
-st.write("PRODUCCIÓN: main.py cargado correctamente")
 
 if "df_f" not in st.session_state or st.session_state.df_f is None:
     st.session_state.df_f = pd.DataFrame()

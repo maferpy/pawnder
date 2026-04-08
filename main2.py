@@ -2,42 +2,24 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from openai import OpenAI
-from dotenv import load_dotenv
 
 # ------------------------
-# CLIENTE OPENAI
+# Inicializar sesión
 # ------------------------
-load_dotenv()
+if "pos" not in st.session_state: st.session_state.pos = 0
+if "ranked" not in st.session_state: st.session_state.ranked = None
+if "df_f" not in st.session_state: st.session_state.df_f = None
+if "selected_pet" not in st.session_state: st.session_state.selected_pet = None
+
+# ------------------------
+# Cliente OpenAI
+# ------------------------
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ------------------------
-# FUNCIONES REUTILIZABLES
+# Inferir nivel de actividad desde la descripción
 # ------------------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("datasets/df_w_text_e5base_final.csv")
-    embeddings = np.load("embeddings/embeddings_text_t.npy")
-    return df, embeddings
-
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer("intfloat/multilingual-e5-base")
-
-@st.cache_data
-def map_images(folder, df):
-    df = df.copy()
-    files = os.listdir(folder)
-    mapping = {}
-    for f in files:
-        if f.lower().endswith(".jpg"):
-            pid = f.split("-")[0]
-            mapping.setdefault(pid, []).append(os.path.join(folder, f))
-    df["image_paths"] = df["PetID"].astype(str).map(mapping)
-    df["image_paths"] = df["image_paths"].apply(lambda x: x if isinstance(x, list) else [])
-    return df
-
 def infer_activity(desc):
     d = str(desc).lower()
     if any(w in d for w in ["energetic", "hyper", "very active"]):
@@ -48,51 +30,39 @@ def infer_activity(desc):
         return "Bajo"
     return "Medio"
 
+# ------------------------
+# Cargar datos y mapear imágenes
+# ------------------------
 @st.cache_data
-def translate_text(text, client=client):
-    """
-    Traduce el texto al español usando OpenAI.
-    """
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "Traduce al español de forma natural."},
-                {"role": "user", "content": str(text)}
-            ],
-            temperature=0.3
-        )
-        return response.choices[0].message.content
-    except:
-        return text
+def load_data():
+    df = pd.read_csv("datasets/df_w_text_e5base_final.csv")
 
-# ------------------------
-# INICIALIZACIÓN
-# ------------------------
-@st.cache_resource
-def init_app():
-    df, embeddings = load_data()
-    df = map_images("datasets/train_images", df)
+    # Nivel de actividad
     df["activity_level"] = df["Description"].apply(infer_activity)
-    return df, embeddings
 
-# Session state
-if "pos" not in st.session_state: st.session_state.pos = 0
-if "ranked" not in st.session_state: st.session_state.ranked = None
-if "df_f" not in st.session_state: st.session_state.df_f = None
-if "selected_pet" not in st.session_state: st.session_state.selected_pet = None
+    # Mapear imágenes
+    folder = "datasets/train_images"
+    files = os.listdir(folder)
+    mapping = {}
+    for f in files:
+        if f.lower().endswith(".jpg"):
+            pid = f.split("-")[0]
+            mapping.setdefault(pid, []).append(os.path.join(folder, f))
+    df["image_paths"] = df["PetID"].astype(str).map(mapping)
+    df["image_paths"] = df["image_paths"].apply(lambda x: x if isinstance(x, list) else [])
+
+    return df
+
+df = load_data()
 
 # ------------------------
-# PÁGINA RECOMENDACIONES
+# Página de recomendaciones
 # ------------------------
 def page_recommendations(df, client):
-    if st.session_state.page != "recomendaciones":
-        return
-
     st.title("🐾 Pawnder - Encuentra tu mascota ideal")
 
     # ------------------------
-    # FILTROS
+    # Preferencias usuario
     # ------------------------
     col1, col2 = st.columns(2)
 
@@ -112,7 +82,32 @@ def page_recommendations(df, client):
     priority = st.selectbox("🚨 ¿Casos urgentes?", ["No importa", "Sí"])
 
     # ------------------------
-    # BOTÓN
+    # Reiniciar resultados si cambian los filtros
+    # ------------------------
+    if "last_filters" not in st.session_state:
+        st.session_state.last_filters = {}
+
+    current_filters = {
+        "tipo": pref_type,
+        "edad": pref_age,
+        "actividad": activity,
+        "niños": has_kids,
+        "mascotas": has_pets,
+        "hogar": home_type,
+        "tiempo": time_available,
+        "salud": health_pref,
+        "max_fee": max_fee,
+        "priority": priority
+    }
+
+    if current_filters != st.session_state.last_filters:
+        st.session_state.df_f = None
+        st.session_state.pos = 0
+        st.session_state.ranked = None
+        st.session_state.last_filters = current_filters
+
+    # ------------------------
+    # Botón Recomiéndame
     # ------------------------
     if st.button("🐾 Recomiéndame!", key="recomienda"):
 
@@ -124,13 +119,12 @@ def page_recommendations(df, client):
         # Edad
         df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
 
-        # Actividad (flexible según tiempo)
+        # Actividad según tiempo disponible
         if time_available == "Poco":
             df_f = df_f[df_f["activity_level"] == "Bajo"]
         elif time_available == "Medio":
-            df_f = df_f[df_f["activity_level"].isin(["Bajo","Medio"])]
-        else:
-            pass  # Mucho → cualquiera
+            df_f = df_f[df_f["activity_level"].isin(["Bajo", "Medio"])]
+        # Mucho → cualquiera
 
         # Niños
         if has_kids == "Sí":
@@ -152,64 +146,63 @@ def page_recommendations(df, client):
 
         # Costo
         df_f = df_f[df_f["Fee"] <= max_fee]
+        # Prioridad urgente
+        if priority == "Sí":
+            df_f = df_f[df_f["urgent"] == 1]
 
         # Fallback si hay pocos resultados
         if len(df_f) < 5:
             df_f = df.copy()
 
         # ------------------------
-        # SCORING INTELIGENTE
+        # Scoring inteligente
         # ------------------------
         score = np.zeros(len(df_f))
-
         score += (df_f["activity_level"] == activity) * 2
-
         if has_kids == "Sí":
             score += df_f["good_with_kids"] * 2
-
         if has_pets == "Sí":
             score += df_f["good_with_pets"] * 2
-
         score += df_f["is_friendly"] * 1
         score += df_f["urgent"] * 2
-
         df_f["score"] = score
         df_f = df_f.sort_values("score", ascending=False)
 
+        # Guardar en sesión
         st.session_state.df_f = df_f.reset_index(drop=True)
         st.session_state.pos = 0
+        st.session_state.ranked = st.session_state.df_f.index.to_numpy()
 
     # ------------------------
-    # MOSTRAR RESULTADOS
+    # Mostrar resultados
     # ------------------------
-    if "df_f" in st.session_state and not st.session_state.df_f.empty:
+    df_f = st.session_state.df_f
+    ranked = st.session_state.ranked
 
-        df_f = st.session_state.df_f
+    if df_f is not None and not df_f.empty and ranked is not None:
         start = st.session_state.pos
         end = start + 3
 
         for _, row in df_f.iloc[start:end].iterrows():
-
             tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
             st.markdown(f"### {row['Name']} - {tipo}")
 
-            # 💡 EXPLICACIÓN
             razones = []
-            if row["activity_level"] == activity:
-                razones.append("tu nivel de actividad")
-            if has_kids=="Sí" and row["good_with_kids"]==1:
-                razones.append("es bueno con niños")
-            if has_pets=="Sí" and row["good_with_pets"]==1:
-                razones.append("convive con otras mascotas")
-            if row["urgent"]==1:
-                razones.append("necesita adopción urgente")
-
+            if row["activity_level"] == activity: razones.append("tu nivel de actividad")
+            if has_kids=="Sí" and row["good_with_kids"]==1: razones.append("es bueno con niños")
+            if has_pets=="Sí" and row["good_with_pets"]==1: razones.append("convive con otras mascotas")
+            if row["urgent"]==1: razones.append("necesita adopción urgente")
             if razones:
                 st.success(f"💡 Recomendado porque coincide con {', '.join(razones)}")
 
-            # Imagen
-            if row["image_paths"]:
-                st.image(row["image_paths"][0], width=200)
+            # ------------------------
+            # Mostrar imágenes
+            # ------------------------
+            if "image_paths" in df_f.columns and isinstance(row["image_paths"], list):
+                paths = row["image_paths"]
+                cols = st.columns(min(3, len(paths)))
+                for i, img in enumerate(paths[:3]):
+                    cols[i].image(img, width=200)
 
             st.markdown(f"""
             - Edad: {row['Age']} meses  
@@ -218,19 +211,23 @@ def page_recommendations(df, client):
             """)
 
             # Botón historia
-            if st.button(f"✨ Historia con {row['Name']}", key=f"hist_{row['PetID']}"):
+            if st.button(f"✨ Cómo sería tu vida con {row['Name']}", key=f"hist_{row['PetID']}..."):
                 st.session_state.selected_pet = row["PetID"]
 
+        # ------------------------
         # Ver más
+        # ------------------------
         if end < len(df_f):
             if st.button("Ver más 🐾"):
                 st.session_state.pos += 3
 
+    else:
+        st.info("No encontramos mascotas que coincidan con tus filtros. Ajusta tus preferencias.")
+
     # ------------------------
-    # HISTORIA
+    # Historia con la mascota
     # ------------------------
     if "selected_pet" in st.session_state and st.session_state.selected_pet is not None:
-
         row = st.session_state.df_f[
             st.session_state.df_f["PetID"] == st.session_state.selected_pet
         ].iloc[0]
@@ -239,10 +236,10 @@ def page_recommendations(df, client):
         Usuario con {has_kids} niños, {has_pets} mascotas,
         vive en {home_type} y tiene tiempo {time_available}.
         Mascota: {row['Description']}.
-        Cuenta una historia corta y emotiva.
+        Cuenta una historia corta y emotiva sobre cómo sería la vida del usuario con esta mascota.
         """
 
-        with st.spinner("Generando historia..."):
+        with st.spinner("Tu vida con esta mascota..."):
             resp = client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=[
@@ -255,7 +252,7 @@ def page_recommendations(df, client):
         st.info(resp.choices[0].message.content)
 
     # ------------------------
-    # VOLVER
+    # Volver al menú
     # ------------------------
     if st.button("⬅️ Volver al menú", key="volver_menu"):
         st.session_state.page = "home"

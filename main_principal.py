@@ -3,9 +3,16 @@ import streamlit as st
 if "page" not in st.session_state:
     st.session_state.page = "home"
 from main import page_predictions
-from main2 import init_app, client, translate_text, page_recommendations, model
+from main2 import load_data, page_recommendations,df
+from openai import OpenAI
+import os
+import pandas as pd
 
-df, embeddings= init_app()
+if "df_f" not in st.session_state or st.session_state.df_f is None:
+    st.session_state.df_f = pd.DataFrame()
+
+df = load_data()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # ------------------------
 # Inicializar sesión
 # ------------------------
@@ -78,6 +85,6 @@ def page_home():
 if st.session_state.page == "home":
     page_home()
 elif st.session_state.page == "recomendaciones":
-    page_recommendations(model, client, df, embeddings)
+    page_recommendations(df, client)
 elif st.session_state.page == "predictions":
     page_predictions()

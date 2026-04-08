@@ -48,7 +48,7 @@ def load_data():
 
     return df
 
-df = load_data()
+# comentar df = load_data()
 
 # ------------------------
 # Página de recomendaciones

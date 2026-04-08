@@ -13,15 +13,8 @@ from openai import OpenAI
 import os
 
 # Agregar openai
-
 load_dotenv()  # 👈 esto carga el .env
-api_key = st.secrets.get("OPENAI_API_KEY", None)
 
-if api_key:
-    client = OpenAI(api_key=api_key)
-else:
-    client = None
-    st.warning("⚠️ OpenAI API key no encontrada. Las historias no se generarán.")
 # Carga Modelos
 @st.cache_resource
 def load_all():
@@ -91,7 +84,7 @@ def predict_adoption_time(user_input: dict, uploaded_file):
     return int(pred[0])
 
 # OpenAI
-def generate_adoption_tips(description, animal_type, age, size, fee, prediction):
+def generate_adoption_tips(description, animal_type, age, size, fee, prediction,client):
 
 
 

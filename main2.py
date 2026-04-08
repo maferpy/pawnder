@@ -7,11 +7,15 @@ from openai import OpenAI
 # ------------------------
 # Inicializar sesión
 # ------------------------
-if "pos" not in st.session_state: st.session_state.pos = 0
-if "ranked" not in st.session_state: st.session_state.ranked = None
-if "df_f" not in st.session_state: st.session_state.df_f = None
-if "selected_pet" not in st.session_state: st.session_state.selected_pet = None
-    
+if "pos" not in st.session_state:
+    st.session_state.pos = 0
+if "ranked" not in st.session_state:
+    st.session_state.ranked = None
+if "df_f" not in st.session_state:
+    st.session_state.df_f = None
+if "selected_pet" not in st.session_state:
+    st.session_state.selected_pet = None
+
 # ------------------------
 # Inferir nivel de actividad desde la descripción
 # ------------------------
@@ -28,9 +32,10 @@ def infer_activity(desc):
 # ------------------------
 # Cargar datos y mapear imágenes
 # ------------------------
-@st.cache_data
+# Nota: comentar @st.cache_data si hay errores en deploy
+# @st.cache_data
 def load_data():
-    BASE_DIR = os.path.dirname(__file__)  # Asegura rutas relativas al archivo
+    BASE_DIR = os.path.dirname(__file__)
     csv_path = os.path.join(BASE_DIR, "datasets", "df_w_text_e5base_final.csv")
     df = pd.read_csv(csv_path)
 
@@ -38,7 +43,7 @@ def load_data():
     df["activity_level"] = df["Description"].apply(infer_activity)
 
     # Mapear imágenes
-    folder = "datasets/train_images"
+    folder = os.path.join(BASE_DIR, "datasets", "train_images")
     files = os.listdir(folder)
     mapping = {}
     for f in files:
@@ -49,8 +54,6 @@ def load_data():
     df["image_paths"] = df["image_paths"].apply(lambda x: x if isinstance(x, list) else [])
 
     return df
-
-# comentar df = load_data()
 
 # ------------------------
 # Página de recomendaciones
@@ -111,7 +114,7 @@ def page_recommendations(df, client):
         df_f = df.copy()
 
         # Tipo
-        df_f = df_f[df_f["Type"] == (1 if pref_type=="Perro" else 2)]
+        df_f = df_f[df_f["Type"] == (1 if pref_type == "Perro" else 2)]
 
         # Edad
         df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
@@ -133,7 +136,7 @@ def page_recommendations(df, client):
 
         # Hogar
         if home_type == "Departamento":
-            df_f = df_f[df_f["MaturitySize"].isin([1,2])]
+            df_f = df_f[df_f["MaturitySize"].isin([1, 2])]
 
         # Salud
         if health_pref == "Saludable":
@@ -143,6 +146,7 @@ def page_recommendations(df, client):
 
         # Costo
         df_f = df_f[df_f["Fee"] <= max_fee]
+
         # Prioridad urgente
         if priority == "Sí":
             df_f = df_f[df_f["urgent"] == 1]
@@ -181,14 +185,18 @@ def page_recommendations(df, client):
         end = start + 3
 
         for _, row in df_f.iloc[start:end].iterrows():
-            tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
+            tipo = "🐶 Perro" if row["Type"] == 1 else "🐱 Gato"
             st.markdown(f"### {row['Name']} - {tipo}")
 
             razones = []
-            if row["activity_level"] == activity: razones.append("tu nivel de actividad")
-            if has_kids=="Sí" and row["good_with_kids"]==1: razones.append("es bueno con niños")
-            if has_pets=="Sí" and row["good_with_pets"]==1: razones.append("convive con otras mascotas")
-            if row["urgent"]==1: razones.append("necesita adopción urgente")
+            if row["activity_level"] == activity:
+                razones.append("tu nivel de actividad")
+            if has_kids == "Sí" and row["good_with_kids"] == 1:
+                razones.append("es bueno con niños")
+            if has_pets == "Sí" and row["good_with_pets"] == 1:
+                razones.append("convive con otras mascotas")
+            if row["urgent"] == 1:
+                razones.append("necesita adopción urgente")
             if razones:
                 st.success(f"💡 Recomendado porque coincide con {', '.join(razones)}")
 
@@ -208,7 +216,7 @@ def page_recommendations(df, client):
             """)
 
             # Botón historia
-            if st.button(f"✨ Cómo sería tu vida con {row['Name']}", key=f"hist_{row['PetID']}..."):
+            if st.button(f"✨ Cómo sería tu vida con {row['Name']}", key=f"hist_{row['PetID']}"):
                 st.session_state.selected_pet = row["PetID"]
 
         # ------------------------
@@ -224,47 +232,33 @@ def page_recommendations(df, client):
     # ------------------------
     # Historia con la mascota
     # ------------------------
-    if "selected_pet" in st.session_state and st.session_state.selected_pet is not None:
-        row = st.session_state.df_f[
-            st.session_state.df_f["PetID"] == st.session_state.selected_pet
-        ].iloc[0]
+    if st.session_state.selected_pet is not None:
+        row = df_f[df_f["PetID"] == st.session_state.selected_pet].iloc[0]
 
         prompt = f"""
         Tú tienes {has_kids} niños, {has_pets} mascotas,
         vives en {home_type} y tienes tiempo {time_available}.
         Mascota: {row['Description']}.
         Describe cómo sería tu vida con esta mascota.
-
-        Háblame directamente usando "tú" y "tu vida".
-        Hazlo emocional, cercano y envolvente.
-        
-        Incluye ejemplos cotidianos como:
-        - mañanas en casa
-        - paseos
-        - momentos tranquilos
-        
-        Evita completamente hablar en tercera persona (no uses "el usuario").
-        Haz que se sienta como una visualización de mi vida con esta mascota
-        y resalta lo que esta mascota aportará en mi vida.
         """
+
         with st.spinner("Tu vida con esta mascota..."):
             if client is not None:
                 resp = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
-                        {"role":"system","content":"Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. 
-                            Siempre escribes hablándome de tú (usando “tu vida…”, “tú…”). 
-                            Tu estilo es descriptivo y envolvente, mostrando situaciones cotidianas con detalles sensoriales y emocionales. 
-                            Evitas un tono técnico o frío, y en su lugar transmites calma, amor y conexión. 
-                            Tus respuestas deben sentirse como una pequeña historia o visualización del futuro del usuario."},
-                        {"role":"user","content":prompt}
+                        {
+                            "role": "system",
+                            "content": "Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. "
+                                       "Siempre hablas usando 'tú' y 'tu vida'. Evita tercera persona."
+                        },
+                        {"role": "user", "content": prompt}
                     ],
                     temperature=0.7
                 )
-
                 st.info(resp.choices[0].message.content)
             else:
-                st.info("La historia de la mascota no puede generarse sin API key.")    
+                st.info("La historia de la mascota no puede generarse sin API key.")
 
     # ------------------------
     # Volver al menú

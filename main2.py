@@ -228,16 +228,23 @@ def page_recommendations(df, client):
         ].iloc[0]
 
         prompt = f"""
-        Usuario con {has_kids} niños, {has_pets} mascotas,
-        vive en {home_type} y tiene tiempo {time_available}.
+        Tú tienes {has_kids} niños, {has_pets} mascotas,
+        vives en {home_type} y tienes tiempo {time_available}.
         Mascota: {row['Description']}.
-        Describe cómo sería mi vida con esta mascota. 
-        Escríbelo hablándome directamente (como ‘tu vida será…’), 
-        con un tono cálido y emocional.
-        Incluye ejemplos de situaciones cotidianas (mañanas, paseos, momentos en casa) 
+        Describe cómo sería tu vida con esta mascota.
+
+        Háblame directamente usando "tú" y "tu vida".
+        Hazlo emocional, cercano y envolvente.
+        
+        Incluye ejemplos cotidianos como:
+        - mañanas en casa
+        - paseos
+        - momentos tranquilos
+        
+        Evita completamente hablar en tercera persona (no uses "el usuario").
+        Haz que se sienta como una visualización de mi vida con esta mascota
         y resalta lo que esta mascota aportará en mi vida.
         """
-0
         with st.spinner("Tu vida con esta mascota..."):
             if client is not None:
                 resp = client.chat.completions.create(

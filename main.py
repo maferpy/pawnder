@@ -134,4 +134,3 @@ def page_predictions(client):
             )
             with st.expander("💡 Consejos para acelerar la adopción"):
                 st.write(tips)
-

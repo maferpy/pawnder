@@ -94,4 +94,4 @@ if st.session_state.page == "home":
 elif st.session_state.page == "recomendaciones":
     page_recommendations(df, client)
 elif st.session_state.page == "predictions":
-    page_predictions()
+    page_predictions(client)

@@ -30,7 +30,9 @@ def infer_activity(desc):
 # ------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("datasets/df_w_text_e5base_final.csv")
+    BASE_DIR = os.path.dirname(__file__)  # Asegura rutas relativas al archivo
+    csv_path = os.path.join(BASE_DIR, "datasets", "df_w_text_e5base_final.csv")
+    df = pd.read_csv(csv_path)
 
     # Nivel de actividad
     df["activity_level"] = df["Description"].apply(infer_activity)

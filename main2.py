@@ -5,16 +5,13 @@ import os
 from openai import OpenAI
 
 # ------------------------
-# Inicializar sesión
+# Inicializar variables de sesión de forma segura
 # ------------------------
-if "pos" not in st.session_state:
-    st.session_state.pos = 0
-if "ranked" not in st.session_state:
-    st.session_state.ranked = None
-if "df_f" not in st.session_state:
-    st.session_state.df_f = None
-if "selected_pet" not in st.session_state:
-    st.session_state.selected_pet = None
+st.session_state.setdefault("pos", 0)
+st.session_state.setdefault("ranked", None)
+st.session_state.setdefault("df_f", None)
+st.session_state.setdefault("selected_pet", None)
+st.session_state.setdefault("last_filters", {})
 
 # ------------------------
 # Inferir nivel de actividad desde la descripción
@@ -32,27 +29,22 @@ def infer_activity(desc):
 # ------------------------
 # Cargar datos y mapear imágenes
 # ------------------------
-# Nota: comentar @st.cache_data si hay errores en deploy
-# @st.cache_data
+@st.cache_data
 def load_data():
     BASE_DIR = os.path.dirname(__file__)
     csv_path = os.path.join(BASE_DIR, "datasets", "df_w_text_e5base_final.csv")
     df = pd.read_csv(csv_path)
 
-    # Nivel de actividad
     df["activity_level"] = df["Description"].apply(infer_activity)
 
-    # Mapear imágenes
     folder = os.path.join(BASE_DIR, "datasets", "train_images")
-    files = os.listdir(folder)
     mapping = {}
-    for f in files:
-        if f.lower().endswith(".jpg"):
-            pid = f.split("-")[0]
-            mapping.setdefault(pid, []).append(os.path.join(folder, f))
-    df["image_paths"] = df["PetID"].astype(str).map(mapping)
-    df["image_paths"] = df["image_paths"].apply(lambda x: x if isinstance(x, list) else [])
-
+    if os.path.exists(folder):
+        for f in os.listdir(folder):
+            if f.lower().endswith(".jpg"):
+                pid = f.split("-")[0]
+                mapping.setdefault(pid, []).append(os.path.join(folder, f))
+    df["image_paths"] = df["PetID"].astype(str).map(mapping).apply(lambda x: x if isinstance(x, list) else [])
     return df
 
 # ------------------------
@@ -84,9 +76,6 @@ def page_recommendations(df, client):
     # ------------------------
     # Reiniciar resultados si cambian los filtros
     # ------------------------
-    if "last_filters" not in st.session_state:
-        st.session_state.last_filters = {}
-
     current_filters = {
         "tipo": pref_type,
         "edad": pref_age,
@@ -100,11 +89,11 @@ def page_recommendations(df, client):
         "priority": priority
     }
 
-    if current_filters != st.session_state.last_filters:
-        st.session_state.df_f = None
-        st.session_state.pos = 0
-        st.session_state.ranked = None
-        st.session_state.last_filters = current_filters
+    if current_filters != st.session_state.get("last_filters", {}):
+        st.session_state["df_f"] = None
+        st.session_state["pos"] = 0
+        st.session_state["ranked"] = None
+        st.session_state["last_filters"] = current_filters
 
     # ------------------------
     # Botón Recomiéndame
@@ -114,7 +103,7 @@ def page_recommendations(df, client):
         df_f = df.copy()
 
         # Tipo
-        df_f = df_f[df_f["Type"] == (1 if pref_type == "Perro" else 2)]
+        df_f = df_f[df_f["Type"] == (1 if pref_type=="Perro" else 2)]
 
         # Edad
         df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
@@ -124,7 +113,6 @@ def page_recommendations(df, client):
             df_f = df_f[df_f["activity_level"] == "Bajo"]
         elif time_available == "Medio":
             df_f = df_f[df_f["activity_level"].isin(["Bajo", "Medio"])]
-        # Mucho → cualquiera
 
         # Niños
         if has_kids == "Sí":
@@ -136,7 +124,7 @@ def page_recommendations(df, client):
 
         # Hogar
         if home_type == "Departamento":
-            df_f = df_f[df_f["MaturitySize"].isin([1, 2])]
+            df_f = df_f[df_f["MaturitySize"].isin([1,2])]
 
         # Salud
         if health_pref == "Saludable":
@@ -170,39 +158,33 @@ def page_recommendations(df, client):
         df_f = df_f.sort_values("score", ascending=False)
 
         # Guardar en sesión
-        st.session_state.df_f = df_f.reset_index(drop=True)
-        st.session_state.pos = 0
-        st.session_state.ranked = st.session_state.df_f.index.to_numpy()
+        st.session_state["df_f"] = df_f.reset_index(drop=True)
+        st.session_state["pos"] = 0
+        st.session_state["ranked"] = st.session_state["df_f"].index.to_numpy()
 
     # ------------------------
     # Mostrar resultados
     # ------------------------
-    df_f = st.session_state.df_f
-    ranked = st.session_state.ranked
+    df_f = st.session_state.get("df_f", None)
+    ranked = st.session_state.get("ranked", None)
 
     if df_f is not None and not df_f.empty and ranked is not None:
-        start = st.session_state.pos
+        start = st.session_state.get("pos", 0)
         end = start + 3
 
         for _, row in df_f.iloc[start:end].iterrows():
-            tipo = "🐶 Perro" if row["Type"] == 1 else "🐱 Gato"
+            tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
             st.markdown(f"### {row['Name']} - {tipo}")
 
             razones = []
-            if row["activity_level"] == activity:
-                razones.append("tu nivel de actividad")
-            if has_kids == "Sí" and row["good_with_kids"] == 1:
-                razones.append("es bueno con niños")
-            if has_pets == "Sí" and row["good_with_pets"] == 1:
-                razones.append("convive con otras mascotas")
-            if row["urgent"] == 1:
-                razones.append("necesita adopción urgente")
+            if row["activity_level"] == activity: razones.append("tu nivel de actividad")
+            if has_kids=="Sí" and row["good_with_kids"]==1: razones.append("es bueno con niños")
+            if has_pets=="Sí" and row["good_with_pets"]==1: razones.append("convive con otras mascotas")
+            if row["urgent"]==1: razones.append("necesita adopción urgente")
             if razones:
                 st.success(f"💡 Recomendado porque coincide con {', '.join(razones)}")
 
-            # ------------------------
             # Mostrar imágenes
-            # ------------------------
             if "image_paths" in df_f.columns and isinstance(row["image_paths"], list):
                 paths = row["image_paths"]
                 cols = st.columns(min(3, len(paths)))
@@ -217,14 +199,12 @@ def page_recommendations(df, client):
 
             # Botón historia
             if st.button(f"✨ Cómo sería tu vida con {row['Name']}", key=f"hist_{row['PetID']}"):
-                st.session_state.selected_pet = row["PetID"]
+                st.session_state["selected_pet"] = row["PetID"]
 
-        # ------------------------
         # Ver más
-        # ------------------------
         if end < len(df_f):
             if st.button("Ver más 🐾"):
-                st.session_state.pos += 3
+                st.session_state["pos"] += 3
 
     else:
         st.info("No encontramos mascotas que coincidan con tus filtros. Ajusta tus preferencias.")
@@ -232,8 +212,10 @@ def page_recommendations(df, client):
     # ------------------------
     # Historia con la mascota
     # ------------------------
-    if st.session_state.selected_pet is not None:
-        row = df_f[df_f["PetID"] == st.session_state.selected_pet].iloc[0]
+    selected_pet = st.session_state.get("selected_pet", None)
+
+    if selected_pet is not None and df_f is not None:
+        row = df_f[df_f["PetID"] == selected_pet].iloc[0]
 
         prompt = f"""
         Tú tienes {has_kids} niños, {has_pets} mascotas,
@@ -247,21 +229,18 @@ def page_recommendations(df, client):
                 resp = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": "Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. "
-                                       "Siempre hablas usando 'tú' y 'tu vida'. Evita tercera persona."
-                        },
-                        {"role": "user", "content": prompt}
+                        {"role":"system","content":"Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. "
+                                                  "Siempre hablas usando 'tú' y 'tu vida'. Evita tercera persona."},
+                        {"role":"user","content":prompt}
                     ],
                     temperature=0.7
                 )
                 st.info(resp.choices[0].message.content)
             else:
-                st.info("La historia de la mascota no puede generarse sin API key.")
+                st.info("La historia de la mascota no puede generarse sin API key.")    
 
     # ------------------------
     # Volver al menú
     # ------------------------
     if st.button("⬅️ Volver al menú", key="volver_menu"):
-        st.session_state.page = "home"
+        st.session_state["page"] = "home"

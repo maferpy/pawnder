@@ -8,6 +8,9 @@ from openai import OpenAI
 import os
 import pandas as pd
 
+import streamlit as st
+st.write("PRODUCCIÓN: main.py cargado correctamente")
+
 if "df_f" not in st.session_state or st.session_state.df_f is None:
     st.session_state.df_f = pd.DataFrame()
 

@@ -1,11 +1,12 @@
 # 🚨 redeploy force
 import streamlit as st
-st.write("PRODUCCIÓN: main.py cargado correctamente")
+st.write("PRODUCCIÓN: main.py cargado correctamente_")
 
 if "page" not in st.session_state:
     st.session_state.page = "home"
 from main import page_predictions
 from main2 import load_data, page_recommendations,df
+df = load_data()
 from openai import OpenAI
 import os
 import pandas as pd

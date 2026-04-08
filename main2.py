@@ -231,15 +231,23 @@ def page_recommendations(df, client):
         Usuario con {has_kids} niños, {has_pets} mascotas,
         vive en {home_type} y tiene tiempo {time_available}.
         Mascota: {row['Description']}.
-        Cuenta una historia corta y emotiva sobre cómo sería la vida del usuario con esta mascota.
+        Describe cómo sería mi vida con esta mascota. 
+        Escríbelo en segunda persona (como ‘tu vida será…’), 
+        con un tono cálido y emocional.
+        Incluye ejemplos de situaciones cotidianas (mañanas, paseos, momentos en casa) 
+        y resalta lo que esta mascota aportará en mi vida.
         """
-
+0
         with st.spinner("Tu vida con esta mascota..."):
             if client is not None:
                 resp = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
-                        {"role":"system","content":"Eres un narrador cálido."},
+                        {"role":"system","content":"Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. 
+                            Siempre escribes en segunda persona (usando “tu vida…”, “tú…”). 
+                            Tu estilo es descriptivo y envolvente, mostrando situaciones cotidianas con detalles sensoriales y emocionales. 
+                            Evitas un tono técnico o frío, y en su lugar transmites calma, amor y conexión. 
+                            Tus respuestas deben sentirse como una pequeña historia o visualización del futuro del usuario."},
                         {"role":"user","content":prompt}
                     ],
                     temperature=0.7

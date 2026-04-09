@@ -34,7 +34,6 @@ def load_data():
     BASE_DIR = os.path.dirname(__file__)
     csv_path = os.path.join(BASE_DIR, "datasets", "df_w_text_e5base_final.csv")
     df = pd.read_csv(csv_path)
-    return df
 
     df["activity_level"] = df["Description"].apply(infer_activity)
 

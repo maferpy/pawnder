@@ -48,6 +48,44 @@ def load_data():
     return df
 
 # ------------------------
+# Función de filtrado
+# ------------------------
+def filter_df(df, filters):
+    df_f = df.copy()
+    # Tipo
+    df_f = df_f[df_f["Type"] == (1 if filters["tipo"]=="Perro" else 2)]
+    # Edad
+    df_f = df_f[(df_f["Age"] >= filters["edad"][0]) & (df_f["Age"] <= filters["edad"][1])]
+    # Actividad según tiempo disponible
+    if filters["tiempo"] == "Poco":
+        df_f = df_f[df_f["activity_level"] == "Bajo"]
+    elif filters["tiempo"] == "Medio":
+        df_f = df_f[df_f["activity_level"].isin(["Bajo","Medio"])]
+    # Niños
+    if filters["niños"] == "Sí":
+        df_f = df_f[df_f["good_with_kids"] == 1]
+    # Mascotas
+    if filters["mascotas"] == "Sí":
+        df_f = df_f[df_f["good_with_pets"] == 1]
+    # Hogar
+    if filters["hogar"] == "Departamento":
+        df_f = df_f[df_f["MaturitySize"].isin([1,2])]
+    # Salud
+    if filters["salud"] == "Saludable":
+        df_f = df_f[df_f["has_health_issue"] == 0]
+    elif filters["salud"] == "Especial":
+        df_f = df_f[df_f["has_health_issue"] == 1]
+    # Costo
+    df_f = df_f[df_f["Fee"] <= filters["max_fee"]]
+    # Prioridad urgente
+    if filters["priority"] == "Sí":
+        df_f = df_f[df_f["urgent"] == 1]
+    # Fallback
+    if len(df_f) < 5:
+        df_f = df.copy()
+    return df_f
+
+# ------------------------
 # Página de recomendaciones
 # ------------------------
 def page_recommendations(df, client):
@@ -57,24 +95,21 @@ def page_recommendations(df, client):
     # Preferencias usuario
     # ------------------------
     col1, col2 = st.columns(2)
-
     with col1:
         pref_type = st.radio("Tipo", ["Perro", "Gato"])
         pref_age = st.slider("Edad (meses)", 0, 200, (0, 24))
         activity = st.selectbox("Actividad", ["Bajo", "Medio", "Alto"])
         home_type = st.selectbox("🏠 Hogar", ["Departamento", "Casa con patio"])
-
     with col2:
         has_kids = st.selectbox("👦🏻 Niños", ["Sí", "No"])
         has_pets = st.selectbox("🐶 Mascotas", ["Sí", "No"])
         time_available = st.selectbox("⏰ Tiempo", ["Poco", "Medio", "Mucho"])
         health_pref = st.selectbox("🩺 Salud", ["Cualquiera", "Saludable", "Especial"])
-
     max_fee = st.slider("💸 Costo máximo", 0, 1000, 200)
     priority = st.selectbox("🚨 ¿Casos urgentes?", ["No importa", "Sí"])
 
     # ------------------------
-    # Reiniciar resultados si cambian los filtros
+    # Guardar filtros actuales
     # ------------------------
     current_filters = {
         "tipo": pref_type,
@@ -90,101 +125,53 @@ def page_recommendations(df, client):
     }
 
     if current_filters != st.session_state.get("last_filters", {}):
-        st.session_state["df_f"] = None
+        st.session_state["last_filters"] = current_filters
         st.session_state["pos"] = 0
         st.session_state["ranked"] = None
-        st.session_state["last_filters"] = current_filters
 
     # ------------------------
-    # Botón Recomiéndame
+    # Aplicar filtrado automáticamente
+    # ------------------------
+    st.session_state["df_f"] = filter_df(df, current_filters)
+
+    # ------------------------
+    # Botón Recomiéndame! → solo scoring/ranking
     # ------------------------
     if st.button("🐾 Recomiéndame!", key="recomienda"):
-
-        df_f = df.copy()
-
-        # Tipo
-        df_f = df_f[df_f["Type"] == (1 if pref_type=="Perro" else 2)]
-
-        # Edad
-        df_f = df_f[(df_f["Age"] >= pref_age[0]) & (df_f["Age"] <= pref_age[1])]
-
-        # Actividad según tiempo disponible
-        if time_available == "Poco":
-            df_f = df_f[df_f["activity_level"] == "Bajo"]
-        elif time_available == "Medio":
-            df_f = df_f[df_f["activity_level"].isin(["Bajo", "Medio"])]
-
-        # Niños
-        if has_kids == "Sí":
-            df_f = df_f[df_f["good_with_kids"] == 1]
-
-        # Mascotas
-        if has_pets == "Sí":
-            df_f = df_f[df_f["good_with_pets"] == 1]
-
-        # Hogar
-        if home_type == "Departamento":
-            df_f = df_f[df_f["MaturitySize"].isin([1,2])]
-
-        # Salud
-        if health_pref == "Saludable":
-            df_f = df_f[df_f["has_health_issue"] == 0]
-        elif health_pref == "Especial":
-            df_f = df_f[df_f["has_health_issue"] == 1]
-
-        # Costo
-        df_f = df_f[df_f["Fee"] <= max_fee]
-
-        # Prioridad urgente
-        if priority == "Sí":
-            df_f = df_f[df_f["urgent"] == 1]
-
-        # Fallback si hay pocos resultados
-        if len(df_f) < 5:
-            df_f = df.copy()
-
-        # ------------------------
-        # Scoring inteligente
-        # ------------------------
+        df_f = st.session_state["df_f"].copy()
         score = np.zeros(len(df_f))
-        score += (df_f["activity_level"] == activity) * 2
-        if has_kids == "Sí":
-            score += df_f["good_with_kids"] * 2
-        if has_pets == "Sí":
-            score += df_f["good_with_pets"] * 2
-        score += df_f["is_friendly"] * 1
-        score += df_f["urgent"] * 2
+        score += (df_f["activity_level"] == current_filters["actividad"])*2
+        if current_filters["niños"]=="Sí": score += df_f["good_with_kids"]*2
+        if current_filters["mascotas"]=="Sí": score += df_f["good_with_pets"]*2
+        score += df_f["is_friendly"]*1
+        score += df_f["urgent"]*2
         df_f["score"] = score
         df_f = df_f.sort_values("score", ascending=False)
-
-        # Guardar en sesión
         st.session_state["df_f"] = df_f.reset_index(drop=True)
-        st.session_state["pos"] = 0
         st.session_state["ranked"] = st.session_state["df_f"].index.to_numpy()
+        st.session_state["pos"] = 0
 
     # ------------------------
     # Mostrar resultados
     # ------------------------
     df_f = st.session_state.get("df_f", None)
     ranked = st.session_state.get("ranked", None)
+    start = st.session_state.get("pos", 0)
+    end = start + 3
 
-    if df_f is not None and not df_f.empty and ranked is not None:
-        start = st.session_state.get("pos", 0)
-        end = start + 3
-
+    if df_f is not None and not df_f.empty:
         for _, row in df_f.iloc[start:end].iterrows():
             tipo = "🐶 Perro" if row["Type"]==1 else "🐱 Gato"
             st.markdown(f"### {row['Name']} - {tipo}")
 
             razones = []
-            if row["activity_level"] == activity: razones.append("tu nivel de actividad")
-            if has_kids=="Sí" and row["good_with_kids"]==1: razones.append("es bueno con niños")
-            if has_pets=="Sí" and row["good_with_pets"]==1: razones.append("convive con otras mascotas")
+            if row["activity_level"] == current_filters["actividad"]: razones.append("tu nivel de actividad")
+            if current_filters["niños"]=="Sí" and row["good_with_kids"]==1: razones.append("es bueno con niños")
+            if current_filters["mascotas"]=="Sí" and row["good_with_pets"]==1: razones.append("convive con otras mascotas")
             if row["urgent"]==1: razones.append("necesita adopción urgente")
             if razones:
                 st.success(f"💡 Recomendado porque coincide con {', '.join(razones)}")
 
-            # Mostrar imágenes
             if "image_paths" in df_f.columns and isinstance(row["image_paths"], list):
                 paths = row["image_paths"]
                 cols = st.columns(min(3, len(paths)))
@@ -197,15 +184,12 @@ def page_recommendations(df, client):
             - Costo: ${row['Fee']}  
             """)
 
-            # Botón historia
             if st.button(f"✨ Cómo sería tu vida con {row['Name']}", key=f"hist_{row['PetID']}"):
                 st.session_state["selected_pet"] = row["PetID"]
 
-        # Ver más
         if end < len(df_f):
             if st.button("Ver más 🐾"):
                 st.session_state["pos"] += 3
-
     else:
         st.info("No encontramos mascotas que coincidan con tus filtros. Ajusta tus preferencias.")
 
@@ -213,31 +197,27 @@ def page_recommendations(df, client):
     # Historia con la mascota
     # ------------------------
     selected_pet = st.session_state.get("selected_pet", None)
-
     if selected_pet is not None and df_f is not None:
-        row = df_f[df_f["PetID"] == selected_pet].iloc[0]
-
+        row = df_f[df_f["PetID"]==selected_pet].iloc[0]
         prompt = f"""
-        Tú tienes {has_kids} niños, {has_pets} mascotas,
-        vives en {home_type} y tienes tiempo {time_available}.
+        Tú tienes {current_filters['niños']} niños, {current_filters['mascotas']} mascotas,
+        vives en {current_filters['hogar']} y tienes tiempo {current_filters['tiempo']}.
         Mascota: {row['Description']}.
         Describe cómo sería tu vida con esta mascota.
         """
-
         with st.spinner("Tu vida con esta mascota..."):
-            if client is not None:
+            if client:
                 resp = client.chat.completions.create(
                     model="gpt-4.1-mini",
                     messages=[
-                        {"role":"system","content":"Eres un asistente que describe escenarios de vida de forma emocional, cálida y cercana. "
-                                                  "Siempre hablas usando 'tú' y 'tu vida'. Evita tercera persona."},
+                        {"role":"system","content":"Eres un asistente emocional y cercano. Usa 'tú' y 'tu vida'. Evita tercera persona."},
                         {"role":"user","content":prompt}
                     ],
                     temperature=0.7
                 )
                 st.info(resp.choices[0].message.content)
             else:
-                st.info("La historia de la mascota no puede generarse sin API key.")    
+                st.info("La historia de la mascota no puede generarse sin API key.")
 
     # ------------------------
     # Volver al menú

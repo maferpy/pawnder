@@ -23,28 +23,40 @@ def load_all():
     fee_cfg = joblib.load("models/fee_bins_u.pkl")
     return model, pca, fee_cfg
 
-
 @st.cache_resource
 def load_text_model():
     return SentenceTransformer("all-MiniLM-L6-v2")
+# ------------------------
+# Lazy loading (IMPORTANTE)
+# ------------------------
+model = None
+pca = None
+fee_cfg = None
+text_model = None
 
+def get_models():
+    global model, pca, fee_cfg, text_model
 
-model, pca, fee_cfg = load_all()
-text_model = load_text_model()
+    if model is None:
+        model, pca, fee_cfg = load_all()
 
+    if text_model is None:
+        text_model = load_text_model()
 
-model_text = model["model_text"]
-model_img = model["model_img"]
-meta_model = model["meta_model"]
-
-text_tab_cols = model["text_cols"]
-img_cols = model["img_cols"]
+    return model, pca, fee_cfg, text_model
 
 
 # ------------------------
 # PREDICCIÓN
 # ------------------------
 def predict_adoption_time(user_input: dict, uploaded_file):
+    model, pca, fee_cfg, text_model = get_models()
+    model_text = model["model_text"]
+    model_img = model["model_img"]
+    meta_model = model["meta_model"]
+
+    text_tab_cols = model["text_cols"]
+    img_cols = model["img_cols"]
 
     # TABULAR
     df = pd.DataFrame([user_input])
